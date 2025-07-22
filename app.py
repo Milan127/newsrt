@@ -35,7 +35,6 @@ def evaluate_strategy(stock_data, stock_name):
     df['Ratio'] = df['Close'] / df['124DMA']
 
     buy_price = None
-    qty = None
     for i in range(len(df)):
         date = df.index[i]
         rsi = df.iloc[i]['rsi']
@@ -43,7 +42,6 @@ def evaluate_strategy(stock_data, stock_name):
         ltp = df.iloc[i]['Close']
 
         if buy_price is None and rsi < 30 and ratio < 0.80:
-            qty = int(5000 // ltp)
             buy_price = ltp
             trades.append({
                 "Stock": stock_name,
@@ -53,11 +51,14 @@ def evaluate_strategy(stock_data, stock_name):
                 "RSI": rsi,
                 "Ratio": ratio,
                 "Investment": 5000,
-                "Qty": qty
+                "Qty": round(5000 / ltp),
+                "P&L (₹)": "",
+                "P&L (%)": ""
             })
 
         elif buy_price is not None and (rsi > 70 or ratio > 1.3 or ltp < 0.75 * buy_price):
             sell_price = ltp
+            qty = round(5000 / buy_price)
             pnl = (sell_price - buy_price) * qty
             pnl_pct = ((sell_price - buy_price) / buy_price) * 100
             trades.append({
@@ -67,12 +68,12 @@ def evaluate_strategy(stock_data, stock_name):
                 "Price": sell_price,
                 "RSI": rsi,
                 "Ratio": ratio,
+                "Investment": 5000,
                 "Qty": qty,
                 "P&L (₹)": round(pnl, 2),
                 "P&L (%)": round(pnl_pct, 2)
             })
             buy_price = None
-            qty = None
 
     return trades
 

@@ -9,7 +9,7 @@ st.set_page_config(page_title="RSI + Ratio Tradebook", layout="wide")
 st.title("📈 RSI + Ratio Strategy Tradebook Viewer")
 
 # === Upload CSV ===
-uploaded_file = st.file_uploader("Upload CSV with Stock Symbols (Column: 'Symbol')", type=["csv"])
+uploaded_file = st.file_uploader("Upload 'sec_bhavdata_full_07072025.csv' with Stock Symbols (Column: 'Symbol')", type=["csv"])
 
 # === Date Range ===
 col1, col2 = st.columns(2)
@@ -66,7 +66,7 @@ def evaluate_strategy(stock_data, stock_name):
                 "Price": sell_price,
                 "RSI": rsi,
                 "Ratio": ratio,
-                "P&L (\u20b9)": round(pnl, 2),
+                "P&L (₹)": round(pnl, 2),
                 "P&L (%)": round(pnl_pct, 2)
             })
             buy_price = None

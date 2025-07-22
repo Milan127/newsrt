@@ -9,7 +9,7 @@ st.set_page_config(page_title="RSI + Ratio Tradebook", layout="wide")
 st.title("📈 RSI + Ratio Strategy Tradebook Viewer")
 
 # === Upload CSV ===
-uploaded_file = st.file_uploader("Upload 'sec_bhavdata_full_07072025.csv' with Stock Symbols (Column: 'Symbol')", type=["csv"])
+uploaded_file = st.file_uploader("Upload CSV file with Stock Symbols (Column: 'Symbol')", type=["csv"])
 
 # === Date Range ===
 col1, col2 = st.columns(2)
@@ -107,8 +107,8 @@ if uploaded_file:
     else:
         symbols = df_symbols['Symbol'].dropna().unique().tolist()
 
-        if st.button("\ud83d\udd0d Run Strategy"):
-            with st.spinner("\ud83d\udcc5 Processing symbols..."):
+        if st.button("⭐ Start Strategy Analysis"):
+            with st.spinner("📅 Processing symbols..."):
                 data = download_data(symbols, start_date, end_date)
 
                 all_trades = []
@@ -133,7 +133,7 @@ if uploaded_file:
                     win_trades = sell_trades[sell_trades['P&L (₹)'] > 0]
                     win_rate = (len(win_trades) / len(sell_trades)) * 100 if len(sell_trades) > 0 else 0
 
-                    st.subheader("\ud83d\udcca Trade Summary")
+                    st.subheader("📊 Trade Summary")
                     col1, col2, col3, col4 = st.columns(4)
                     col1.metric("Total Trades", len(sell_trades))
                     col2.metric("Win %", f"{win_rate:.2f}%")
@@ -154,10 +154,10 @@ if uploaded_file:
                         df_display = df_display[df_display["Action"] == action_filter]
 
                     st.dataframe(df_display, use_container_width=True)
-                    st.download_button("\ud83d\udcc2 Download CSV", df_trades.to_csv(index=False), file_name="tradebook.csv")
+                    st.download_button("📂 Download CSV", df_trades.to_csv(index=False), file_name="tradebook.csv")
 
                     if stock_filter != "All" and stock_filter in charts:
-                        st.subheader(f"\ud83d\udcc8 Chart for {stock_filter}")
+                        st.subheader(f"📈 Chart for {stock_filter}")
                         plot_price_chart(charts[stock_filter], df_trades[df_trades['Stock'] == stock_filter])
                 else:
-                    st.warning("\u26a0\ufe0f No trades generated.")
+                    st.warning("⚠️ No trades generated.")

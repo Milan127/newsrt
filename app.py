@@ -39,6 +39,7 @@ def evaluate_strategy(stock_data, stock_name, per_stock_investment):
 
     buy_price = None
     buy_qty = None
+    buy_date = None
     for i in range(len(df)):
         date = df.index[i]
         rsi = df.iloc[i]['rsi']
@@ -48,6 +49,7 @@ def evaluate_strategy(stock_data, stock_name, per_stock_investment):
         if buy_price is None and rsi < 30 and ratio < 0.80:
             buy_price = ltp
             buy_qty = int(per_stock_investment / ltp)
+            buy_date = date
             trades.append({
                 "Stock": stock_name,
                 "Date": date,
@@ -58,12 +60,14 @@ def evaluate_strategy(stock_data, stock_name, per_stock_investment):
                 "Qty": buy_qty,
                 "Investment": round(buy_price * buy_qty, 2),
                 "P&L (₹)": None,
-                "Capital": None
+                "Capital": None,
+                "Days Held": None
             })
 
         elif buy_price is not None and (rsi > 70 or ratio > 1.3 or ltp < 0.75 * buy_price):
             sell_price = ltp
             pnl = (sell_price - buy_price) * buy_qty
+            days_held = (date - buy_date).days if buy_date else None
             trades.append({
                 "Stock": stock_name,
                 "Date": date,
@@ -74,10 +78,12 @@ def evaluate_strategy(stock_data, stock_name, per_stock_investment):
                 "Qty": buy_qty,
                 "Investment": None,
                 "P&L (₹)": round(pnl, 2),
-                "Capital": None
+                "Capital": None,
+                "Days Held": days_held
             })
             buy_price = None
             buy_qty = None
+            buy_date = None
 
     return trades
 

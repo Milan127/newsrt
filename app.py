@@ -17,13 +17,18 @@ def_date = pd.to_datetime("2024-10-01")
 start_date = col1.date_input("Start Date", value=def_date)
 end_date = col2.date_input("End Date", value=pd.to_datetime("today"))
 
+# === Capital Inputs ===
+col3, col4 = st.columns(2)
+total_capital = col3.number_input("Total Capital (₹)", value=50000, step=1000)
+per_trade_investment = col4.number_input("Per Stock Investment (₹)", value=5000, step=100)
+
 # === Download Data ===
 def download_data(symbols, start, end):
     symbols_ns = [s + ".NS" for s in symbols]
     return yf.download(symbols_ns, start=start, end=end, group_by='ticker', auto_adjust=True, threads=True)
 
 # === Strategy Function ===
-def evaluate_strategy(stock_data, stock_name):
+def evaluate_strategy(stock_data, stock_name, investment):
     trades = []
     if stock_data.isnull().values.any():
         return trades
@@ -43,6 +48,7 @@ def evaluate_strategy(stock_data, stock_name):
 
         if buy_price is None and rsi < 30 and ratio < 0.80:
             buy_price = ltp
+            qty = int(investment / ltp)
             trades.append({
                 "Stock": stock_name,
                 "Date": date,
@@ -50,15 +56,13 @@ def evaluate_strategy(stock_data, stock_name):
                 "Price": ltp,
                 "RSI": rsi,
                 "Ratio": ratio,
-                "Investment": 5000,
-                "Qty": round(5000 / ltp),
-                "P&L (₹)": "",
-                "P&L (%)": ""
+                "Investment": investment,
+                "Qty": qty
             })
 
         elif buy_price is not None and (rsi > 70 or ratio > 1.3 or ltp < 0.75 * buy_price):
             sell_price = ltp
-            qty = round(5000 / buy_price)
+            qty = int(investment / buy_price)
             pnl = (sell_price - buy_price) * qty
             pnl_pct = ((sell_price - buy_price) / buy_price) * 100
             trades.append({
@@ -68,8 +72,6 @@ def evaluate_strategy(stock_data, stock_name):
                 "Price": sell_price,
                 "RSI": rsi,
                 "Ratio": ratio,
-                "Investment": 5000,
-                "Qty": qty,
                 "P&L (₹)": round(pnl, 2),
                 "P&L (%)": round(pnl_pct, 2)
             })
@@ -113,17 +115,32 @@ if uploaded_file:
 
         if st.button("⭐ Start Strategy Analysis"):
             with st.spinner("📅 Processing symbols..."):
+                if not per_trade_investment:
+                    per_trade_investment = total_capital / len(symbols)
+
                 data = download_data(symbols, start_date, end_date)
 
                 all_trades = []
                 charts = {}
+                capital_timeline = []
+                cumulative_pnl = 0
+
                 for sym in symbols:
                     try:
                         df = data[sym + ".NS"]
-                        trades = evaluate_strategy(df, sym)
+                        trades = evaluate_strategy(df, sym, per_trade_investment)
                         if trades:
                             all_trades.extend(trades)
                             charts[sym] = df
+
+                            # Capital growth tracking
+                            for t in trades:
+                                if t['Action'] == 'Sell' and 'P&L (₹)' in t:
+                                    cumulative_pnl += t['P&L (₹)']
+                                    capital_timeline.append({
+                                        "Date": t['Date'],
+                                        "Capital": total_capital + cumulative_pnl
+                                    })
                     except Exception as e:
                         st.warning(f"Error with {sym}: {e}")
 
@@ -144,7 +161,20 @@ if uploaded_file:
                     col3.metric("Total P&L", f"₹{total_profit:,.2f}")
                     col4.metric("Avg Return", f"{avg_return:.2f}%")
 
-                    # Filters
+                    st.subheader("📈 Capital Growth")
+                    if capital_timeline:
+                        df_cap = pd.DataFrame(capital_timeline).sort_values("Date")
+                        fig = go.Figure()
+                        fig.add_trace(go.Scatter(x=df_cap['Date'], y=df_cap['Capital'], mode='lines+markers', name='Capital', line=dict(color='darkgreen')))
+                        fig.update_layout(title="Capital Growth Over Time", xaxis_title="Date", yaxis_title="Capital (₹)", template="plotly_white")
+                        st.plotly_chart(fig, use_container_width=True)
+
+                    # === Leaderboard ===
+                    st.subheader("🏆 Top 5 Stocks by Profit")
+                    leaderboard = sell_trades.groupby("Stock")["P&L (₹)"].sum().sort_values(ascending=False).head(5)
+                    st.dataframe(leaderboard.reset_index(), use_container_width=True)
+
+                    # === Filters ===
                     stocks = sorted(df_trades["Stock"].unique())
                     actions = ["All", "Buy", "Sell"]
                     colf1, colf2 = st.columns(2)

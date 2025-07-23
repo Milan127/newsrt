@@ -191,15 +191,15 @@ if uploaded_file:
                     if action_filter != "All":
                         df_display = df_display[df_display["Action"] == action_filter]
 
-                    st.subheader("📋 Trade Log Viewer")
-                    show_all = st.toggle("📜 Show Full Trade Log", value=False)
-                    if show_all:
-                        st.dataframe(df_display, use_container_width=True, height=1500)
-                    else:
-                        st.dataframe(df_display, use_container_width=True)
-
+                    st.dataframe(df_display, use_container_width=True, height=600)
                     st.download_button("📂 Download CSV", df_trades.to_csv(index=False), file_name="tradebook.csv")
 
+                    # Debug Log Viewer
+                    with st.expander("🧾 View Full Trade Log"):
+                        log_output = "\n".join([f"{t['Date']} | {t['Stock']} | {t['Action']} | {t['Price']} | Qty: {t['Qty']}" for t in all_trades])
+                        st.text_area("Trade Log", log_output, height=300)
+
+                    # Price Chart
                     if stock_filter != "All" and stock_filter in charts:
                         st.subheader(f"📈 Chart for {stock_filter}")
                         plot_price_chart(charts[stock_filter], df_trades[df_trades['Stock'] == stock_filter])

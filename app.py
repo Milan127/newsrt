@@ -11,16 +11,14 @@ st.title("📈 RSI + Ratio Strategy Tradebook Viewer")
 # === Upload CSV ===
 uploaded_file = st.file_uploader("Upload CSV file with Stock Symbols (Column: 'Symbol')", type=["csv"])
 
-# === Date Range ===
+# === Date Range and Capital Settings ===
 col1, col2 = st.columns(2)
 def_date = pd.to_datetime("2024-10-01")
 start_date = col1.date_input("Start Date", value=def_date)
 end_date = col2.date_input("End Date", value=pd.to_datetime("today"))
 
-# === Capital Inputs ===
-col3, col4 = st.columns(2)
-total_capital = col3.number_input("Total Capital (₹)", value=50000, step=1000)
-per_trade_investment = col4.number_input("Per Stock Investment (₹)", value=5000, step=100)
+total_capital = st.number_input("Total Capital (₹)", value=100000)
+per_stock_investment = st.number_input("Investment per Stock (₹)", value=5000)
 
 # === Download Data ===
 def download_data(symbols, start, end):
@@ -28,7 +26,7 @@ def download_data(symbols, start, end):
     return yf.download(symbols_ns, start=start, end=end, group_by='ticker', auto_adjust=True, threads=True)
 
 # === Strategy Function ===
-def evaluate_strategy(stock_data, stock_name, investment):
+def evaluate_strategy(stock_data, stock_name, per_stock_investment):
     trades = []
     if stock_data.isnull().values.any():
         return trades
@@ -40,6 +38,7 @@ def evaluate_strategy(stock_data, stock_name, investment):
     df['Ratio'] = df['Close'] / df['124DMA']
 
     buy_price = None
+    buy_qty = None
     for i in range(len(df)):
         date = df.index[i]
         rsi = df.iloc[i]['rsi']
@@ -48,7 +47,7 @@ def evaluate_strategy(stock_data, stock_name, investment):
 
         if buy_price is None and rsi < 30 and ratio < 0.80:
             buy_price = ltp
-            qty = int(investment / ltp)
+            buy_qty = int(per_stock_investment / ltp)
             trades.append({
                 "Stock": stock_name,
                 "Date": date,
@@ -56,15 +55,15 @@ def evaluate_strategy(stock_data, stock_name, investment):
                 "Price": ltp,
                 "RSI": rsi,
                 "Ratio": ratio,
-                "Investment": investment,
-                "Qty": qty
+                "Qty": buy_qty,
+                "Investment": round(buy_price * buy_qty, 2),
+                "P&L (₹)": None,
+                "Capital": None
             })
 
         elif buy_price is not None and (rsi > 70 or ratio > 1.3 or ltp < 0.75 * buy_price):
             sell_price = ltp
-            qty = int(investment / buy_price)
-            pnl = (sell_price - buy_price) * qty
-            pnl_pct = ((sell_price - buy_price) / buy_price) * 100
+            pnl = (sell_price - buy_price) * buy_qty
             trades.append({
                 "Stock": stock_name,
                 "Date": date,
@@ -72,10 +71,13 @@ def evaluate_strategy(stock_data, stock_name, investment):
                 "Price": sell_price,
                 "RSI": rsi,
                 "Ratio": ratio,
+                "Qty": buy_qty,
+                "Investment": None,
                 "P&L (₹)": round(pnl, 2),
-                "P&L (%)": round(pnl_pct, 2)
+                "Capital": None
             })
             buy_price = None
+            buy_qty = None
 
     return trades
 
@@ -115,32 +117,17 @@ if uploaded_file:
 
         if st.button("⭐ Start Strategy Analysis"):
             with st.spinner("📅 Processing symbols..."):
-                if not per_trade_investment:
-                    per_trade_investment = total_capital / len(symbols)
-
                 data = download_data(symbols, start_date, end_date)
 
                 all_trades = []
                 charts = {}
-                capital_timeline = []
-                cumulative_pnl = 0
-
                 for sym in symbols:
                     try:
                         df = data[sym + ".NS"]
-                        trades = evaluate_strategy(df, sym, per_trade_investment)
+                        trades = evaluate_strategy(df, sym, per_stock_investment)
                         if trades:
                             all_trades.extend(trades)
                             charts[sym] = df
-
-                            # Capital growth tracking
-                            for t in trades:
-                                if t['Action'] == 'Sell' and 'P&L (₹)' in t:
-                                    cumulative_pnl += t['P&L (₹)']
-                                    capital_timeline.append({
-                                        "Date": t['Date'],
-                                        "Capital": total_capital + cumulative_pnl
-                                    })
                     except Exception as e:
                         st.warning(f"Error with {sym}: {e}")
 
@@ -148,9 +135,21 @@ if uploaded_file:
                     df_trades = pd.DataFrame(all_trades)
                     df_trades.sort_values(by="Date", inplace=True)
 
+                    # Capital Simulation
+                    capital = total_capital
+                    capital_progress = []
+                    for i, row in df_trades.iterrows():
+                        if row['Action'] == 'Buy':
+                            capital -= row['Investment']
+                        elif row['Action'] == 'Sell':
+                            capital += row['Qty'] * row['Price']
+                            df_trades.at[i, 'P&L (₹)'] = round((row['Price'] - df_trades.at[i - 1, 'Price']) * row['Qty'], 2)
+                        df_trades.at[i, 'Capital'] = round(capital, 2)
+                        capital_progress.append({"Date": row['Date'], "Capital": capital})
+
                     sell_trades = df_trades[df_trades['Action'] == 'Sell']
                     total_profit = sell_trades['P&L (₹)'].sum()
-                    avg_return = sell_trades['P&L (%)'].mean()
+                    avg_return = sell_trades['P&L (₹)'].mean()
                     win_trades = sell_trades[sell_trades['P&L (₹)'] > 0]
                     win_rate = (len(win_trades) / len(sell_trades)) * 100 if len(sell_trades) > 0 else 0
 
@@ -159,22 +158,21 @@ if uploaded_file:
                     col1.metric("Total Trades", len(sell_trades))
                     col2.metric("Win %", f"{win_rate:.2f}%")
                     col3.metric("Total P&L", f"₹{total_profit:,.2f}")
-                    col4.metric("Avg Return", f"{avg_return:.2f}%")
+                    col4.metric("Avg P&L", f"₹{avg_return:.2f}")
 
-                    st.subheader("📈 Capital Growth")
-                    if capital_timeline:
-                        df_cap = pd.DataFrame(capital_timeline).sort_values("Date")
-                        fig = go.Figure()
-                        fig.add_trace(go.Scatter(x=df_cap['Date'], y=df_cap['Capital'], mode='lines+markers', name='Capital', line=dict(color='darkgreen')))
-                        fig.update_layout(title="Capital Growth Over Time", xaxis_title="Date", yaxis_title="Capital (₹)", template="plotly_white")
-                        st.plotly_chart(fig, use_container_width=True)
-
-                    # === Leaderboard ===
-                    st.subheader("🏆 Top 5 Stocks by Profit")
+                    # Leaderboard
                     leaderboard = sell_trades.groupby("Stock")["P&L (₹)"].sum().sort_values(ascending=False).head(5)
+                    st.subheader("🏆 Top 5 Stocks by P&L")
                     st.dataframe(leaderboard.reset_index(), use_container_width=True)
 
-                    # === Filters ===
+                    # Capital Chart
+                    cap_df = pd.DataFrame(capital_progress).dropna()
+                    cap_chart = go.Figure()
+                    cap_chart.add_trace(go.Scatter(x=cap_df['Date'], y=cap_df['Capital'], mode='lines+markers', name='Capital'))
+                    cap_chart.update_layout(title="Capital Growth Over Time", xaxis_title="Date", yaxis_title="Capital (₹)", template="plotly_white")
+                    st.plotly_chart(cap_chart, use_container_width=True)
+
+                    # Filters
                     stocks = sorted(df_trades["Stock"].unique())
                     actions = ["All", "Buy", "Sell"]
                     colf1, colf2 = st.columns(2)

@@ -191,7 +191,13 @@ if uploaded_file:
                     if action_filter != "All":
                         df_display = df_display[df_display["Action"] == action_filter]
 
-                    st.dataframe(df_display, use_container_width=True)
+                    st.subheader("📋 Trade Log Viewer")
+                    show_all = st.toggle("📜 Show Full Trade Log", value=False)
+                    if show_all:
+                        st.dataframe(df_display, use_container_width=True, height=1500)
+                    else:
+                        st.dataframe(df_display, use_container_width=True)
+
                     st.download_button("📂 Download CSV", df_trades.to_csv(index=False), file_name="tradebook.csv")
 
                     if stock_filter != "All" and stock_filter in charts:
